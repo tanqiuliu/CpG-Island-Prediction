@@ -2,7 +2,6 @@ import sys
 import numpy as np
 from Bio import SeqIO
 import pandas as pd
-from util import *
 
 STATE = ['A+', 'A-', 'G+', 'G-', 'C+', 'C-', 'T+', 'T-', 'N+', 'N-'] 
 OBS = ['A', 'G', 'C', 'T', 'N']
@@ -17,12 +16,13 @@ def load_cpg(fpath):
     return cpg
 
 
-def count(seq, cpg_df):
+def getFreq(seq, cpg_df):
     cpg_df = cpg_df.sort_values(by=['chromStart'])
     cpg_starts = cpg_df['chromStart']
     cpg_ends = cpg_df['chromEnd']
+    d = {c:{s:c+s for s in ['+','-']} for c in OBS}
     # initialize counter
-    pseudo_count = 1
+    pseudo_count = 0
     transition = {n_prev:{n_next:pseudo_count for n_next in STATE} for n_prev in STATE}
     # count
     state = '-'   # indicator of whether i is in CpG or not
@@ -36,10 +36,17 @@ def count(seq, cpg_df):
         if i ==  cpg_ends[idx]:
             state = '-'
             idx += 1
-        state_next = seq[i] + state
+        state_next = d[seq[i]][state]
         transition[state_prev][state_next] += 1
         state_prev = state_next
-    return transition
+    return pd.DataFrame(transition)
+
+
+def getTransitionProb(trans_freq):
+    """
+    trans_freq: pandas DataFrame, transition frequency from count
+    """
+
         
 
 
@@ -54,4 +61,4 @@ if __name__ == '__main__':
     
     chr = SeqIO.read(seqPath,'fasta').seq.upper()
     cpg_df = load_cpg(cpgPath)
-    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr.id]
+    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == 'chr1']
