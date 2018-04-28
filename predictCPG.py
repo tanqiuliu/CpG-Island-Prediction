@@ -16,6 +16,23 @@ def load_cpg(fpath):
     return cpg
 
 
+def sample_seq(chr_seq, cpg_df, start, end):
+    """
+    sample a subseq from chromosome and build cpg_df for it
+    """
+    seq = chr_seq[start:end]
+    cpg_sample = []
+    for i in range(len(cpg_df)):
+        if start < cpg_df.iloc[i]['chromStart'] and cpg_df.iloc[i]['chromEnd'] < end:
+            cpg_sample.append([cpg_df.iloc[i]['chromStart']-start, cpg_df.iloc[i]['chromEnd']-start])
+        elif cpg_df.iloc[i]['chromStart'] < start < cpg_df.iloc[i]['chromEnd']:
+            cpg_sample.append([0, cpg_df.iloc[i]['chromEnd']-start])
+        elif cpg_df.iloc[i]['chromStart'] < end < cpg_df.iloc[i]['chromEnd']:
+            cpg_sample.append([cpg_df.iloc[i]['chromStart']-start, end-start])
+    cpg_df_sample = pd.DataFrame(cpg_sample, columns=['chromStart','chromEnd'])
+    return seq, cpg_df_sample
+
+
 def getFreq(seq, cpg_df):
     cpg_df = cpg_df.sort_values(by=['chromStart'])
     cpg_starts = cpg_df['chromStart']
@@ -42,12 +59,18 @@ def getFreq(seq, cpg_df):
     return pd.DataFrame(transition)
 
 
-def getTransitionProb(trans_freq):
+def getLogTransitionProb(freq):
     """
-    trans_freq: pandas DataFrame, transition frequency from count
+    freq: pandas DataFrame, transition frequency from count
     """
+    neg_inf = 1e-10
+    freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
+    prob = freq / np.sum(freq, axis = 0) + neg_inf
+    return np.log(prob)
 
-        
+
+def score(cpg_gt, cpg_pred):
+    pass
 
 
 
@@ -59,6 +82,15 @@ if __name__ == '__main__':
         seqPath = 'data/chr1.fa'
         cpgPath = 'data/hg38-cpgIslandExt.txt'
     
-    chr = SeqIO.read(seqPath,'fasta').seq.upper()
+    chr = SeqIO.read(seqPath,'fasta')
+    chr_id = chr.id
+    chr_seq = chr.seq.upper()
     cpg_df = load_cpg(cpgPath)
-    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == 'chr1']
+    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
+
+    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=0, end=1000000) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
+    freq = getFreq(train_seq, train_cpg)
+    log_trans_prob = getLogTransitionProb(freq)
+
+
