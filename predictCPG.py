@@ -64,13 +64,64 @@ def getLogTransitionProb(freq):
     freq: pandas DataFrame, transition frequency from count
     """
     neg_inf = 1e-10
-    freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
+    #freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
     prob = freq / np.sum(freq, axis = 0) + neg_inf
     return np.log(prob)
 
 
+
+
+def viterbi(seq, log_trans_prob):
+    path = []
+    prob_mem = {j:{i:0 for i in STATE} for j in range(len(seq))}
+    prev_state_mem = {j:{i:0 for i in STATE} for j in range(len(seq))}
+    state_dict = {"A" : {"A+", "A-"}, "T" : {"T+", "T-"}, "G" : {"G+", "G-"}, "C" : {"C+", "C-"}}
+    for i in range(1,len(seq)):
+        print(i)
+        cur_state = state_dict[seq[i]]
+        for cur in cur_state:
+            max_prob = -1
+            max_prev = 0
+            for prev in STATE:
+                p = prob_mem[i - 1][prev] + log_trans_prob[prev][cur] + 0
+                if p > max_prob:
+                    max_prob = p
+                    max_prev = prev
+        prob_mem[i][cur] = max_prob
+        prev_state_mem[i][cur] = max_prev
+    cur_prob = prob_mem[len(seq) - 1]
+    max_prob = max(cur_prob.values())
+    best_score = max_prob
+    for s in cur_prob.keys():
+        if cur_prob[s] == max_prob:
+            max_state = s
+    path.append(max_state)
+    #
+    for i in range(len(seq) - 1, 0, -1):
+        prev_max_state = prev_state_mem[i][max_state]
+        path.append(prev_max_state)
+        max_state = prev_max_state
+    #
+    result_path = []
+    for i in range(len(seq) - 1, -1, -1):
+        result_path.append(path[i])
+    return result_path, best_score
+
+
+def iou(start1, end1, start2, end2):
+    intersect = min(end1, end2) - max(start1, start2)
+    union = max(end1, end2) - min(start1, start2)
+    return intersect / union
+
+
 def score(cpg_gt, cpg_pred):
-    pass
+    """
+    cpg_gt = train_cpg.iloc[0:5]
+    aa = np.array([[29000,29500],[134800,135300],[200000,200400],[350000,360000],[380000,383000]])
+    cpg_pred = pd.DataFrame(aa,columns=['chromStart','chromEnd'])
+    """
+    
+
 
 
 
@@ -89,8 +140,9 @@ if __name__ == '__main__':
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
 
     train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=0, end=1000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=1001000) 
     freq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(freq)
+    pred_path, best_score = viterbi(test_seq, log_trans_prob)
 
 
