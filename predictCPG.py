@@ -16,23 +16,6 @@ def load_cpg(fpath):
     return cpg
 
 
-def sample_seq(chr_seq, cpg_df, start, end):
-    """
-    sample a subseq from chromosome and build cpg_df for it
-    """
-    seq = chr_seq[start:end]
-    cpg_sample = []
-    for i in range(len(cpg_df)):
-        if start < cpg_df.iloc[i]['chromStart'] and cpg_df.iloc[i]['chromEnd'] < end:
-            cpg_sample.append([cpg_df.iloc[i]['chromStart']-start, cpg_df.iloc[i]['chromEnd']-start])
-        elif cpg_df.iloc[i]['chromStart'] < start < cpg_df.iloc[i]['chromEnd']:
-            cpg_sample.append([0, cpg_df.iloc[i]['chromEnd']-start])
-        elif cpg_df.iloc[i]['chromStart'] < end < cpg_df.iloc[i]['chromEnd']:
-            cpg_sample.append([cpg_df.iloc[i]['chromStart']-start, end-start])
-    cpg_df_sample = pd.DataFrame(cpg_sample, columns=['chromStart','chromEnd'])
-    return seq, cpg_df_sample
-
-
 def getFreq(seq, cpg_df):
     cpg_df = cpg_df.sort_values(by=['chromStart'])
     cpg_starts = cpg_df['chromStart']
@@ -59,19 +42,68 @@ def getFreq(seq, cpg_df):
     return pd.DataFrame(transition)
 
 
-def getLogTransitionProb(freq):
+def getTransitionProb(trans_freq):
     """
-    freq: pandas DataFrame, transition frequency from count
+    trans_freq: pandas DataFrame, transition frequency from count
     """
-    neg_inf = 1e-10
-    freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
-    prob = freq / np.sum(freq, axis = 0) + neg_inf
-    return np.log(prob)
+
+def getObs(data):
+    global OBSSEQ
+    dataFile = open(data,'r')
+    for line in dataFile:
+        OBSSEQ += line.rstrip()
+    dataFile.close()
+    return OBSSEQ
 
 
-def score(cpg_gt, cpg_pred):
-    pass
+state_dict = {"A" : {"A+", "A-"}, "T" : {"T+", "T-"}, "G" : {"G+", "G-"}, "C" : {"C+", "C-"}}
 
+def viterbi(seq, log_trans_prob):
+
+    path = []
+    prob_mem = {j:{i:0 for i in state} for j in range(len(obsSeq))}
+    prev_state_mem = {j:{i:0 for i in state} for j in range(len(obsSeq))}
+
+    for i in xrange(len(seq)):
+
+        for c in seq:
+            cur_state = state_dict[c]
+
+            for cur in cur_state:
+                max_prob = -1
+                max_prev = 0
+
+                for prev in STATE:
+                    p = prob_mem[i - 1][prev] + log_trans_prob[prev][cur] + 0
+
+                    if p > max_prob:
+                        max_prob = p
+                        max_prev = prev
+
+            prob_mem[i][cur] = max_prob
+            prev_state_mem[i][cur] = max_prev
+
+
+    cur_prob = max(prob_mem[len(seq) - 1].values())
+    best_score = max_prob
+
+    for s in cur_prob.keys():
+        if cur_prob[s]==cur_prob:
+            max_state = s
+
+    path.append(max_state)
+
+    for i in range(len(seq) - 1, 0, -1):
+        prev_max_state = prev_state_mem[i][max_state]
+        path.append(prev_max_state)
+        max_state = prev_max_state
+
+    result_path = []
+
+    for i in range(len(seq) - 1, -1, -1):
+        result_path.append(path[i])
+
+    return result_path, best_score
 
 
 if __name__ == '__main__':
@@ -82,15 +114,6 @@ if __name__ == '__main__':
         seqPath = 'data/chr1.fa'
         cpgPath = 'data/hg38-cpgIslandExt.txt'
     
-    chr = SeqIO.read(seqPath,'fasta')
-    chr_id = chr.id
-    chr_seq = chr.seq.upper()
+    chr = SeqIO.read(seqPath,'fasta').seq.upper()
     cpg_df = load_cpg(cpgPath)
-    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
-
-    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=0, end=1000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
-    freq = getFreq(train_seq, train_cpg)
-    log_trans_prob = getLogTransitionProb(freq)
-
-
+    cpg_df_chr1 = cpg_df[cpg_df['chrom'] == 'chr1']
