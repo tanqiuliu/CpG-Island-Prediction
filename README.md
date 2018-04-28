@@ -1,6 +1,7 @@
 # CpG-Island-Prediction
 
-#### Team members: Tanqiu Liu, Wenjie Zhu
+#### Group member: Tanqiu Liu, Wenjie Zhu
+
 
 ## Background: 
 #### (1) CpG island Background
