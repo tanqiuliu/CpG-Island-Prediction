@@ -41,6 +41,7 @@ def getFreq(seq, cpg_df):
     # initialize counter
     pseudo_count = 0
     transition = {n_prev:{n_next:pseudo_count for n_next in STATE} for n_prev in STATE}
+    prior = {s:pseudo_count for s in STATE}
     # count
     state = '-'   # indicator of whether i is in CpG or not
     idx = 0     # index of cpg info
@@ -53,22 +54,29 @@ def getFreq(seq, cpg_df):
         if i ==  cpg_ends[idx]:
             state = '-'
             idx += 1
+        # count transition
         state_next = d[seq[i]][state]
         transition[state_prev][state_next] += 1
         state_prev = state_next
-    return pd.DataFrame(transition)
+        # count prior
+        prior[d[seq[i]][state]] += 1
+    return pd.DataFrame(transition), pd.Series(prior)
 
 
 def getLogTransitionProb(freq):
     """
     freq: pandas DataFrame, transition frequency from count
     """
-    neg_inf = 1e-10
+    neg_inf = 1e-30
     #freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
     prob = freq / np.sum(freq, axis = 0) + neg_inf
     return np.log(prob)
 
 
+def getLogPriorProb(prior_count):
+    neg_inf = 1e-30
+    prob = prior_count / np.sum(prior_count)
+    return np.log(prob)
 
 
 def viterbi(seq, log_trans_prob, log_prior_prob):
@@ -78,10 +86,9 @@ def viterbi(seq, log_trans_prob, log_prior_prob):
     state_dict = {"A" : {"A+", "A-"}, "T" : {"T+", "T-"}, "G" : {"G+", "G-"}, "C" : {"C+", "C-"}}
     # prior
     for s in STATE:
-        prob_mem[0][s] = prior[s]
+        prob_mem[0][s] = log_prior_prob[s]
     #
     for i in range(1,len(seq)):
-        print(i)
         cur_state = state_dict[seq[i]]
         for cur in cur_state:
             max_prob = -np.inf
@@ -170,10 +177,11 @@ if __name__ == '__main__':
     cpg_df = load_cpg(cpgPath)
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
 
-    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=0, end=1000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=1001000) 
-    freq = getFreq(train_seq, train_cpg)
-    log_trans_prob = getLogTransitionProb(freq)
-    pred_path, best_score = viterbi(test_seq, log_trans_prob)
+    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=2000010) 
+    transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
+    log_trans_prob = getLogTransitionProb(transitionFreq)
+    log_prior_prob = getLogPriorProb(priorFreq)
+    pred_path, best_score = viterbi(test_seq, log_trans_prob, log_prior_prob)
 
 
