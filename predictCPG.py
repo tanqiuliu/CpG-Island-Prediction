@@ -47,13 +47,14 @@ def getFreq(seq, cpg_df):
     idx = 0     # index of cpg info
     state_prev = seq[0] + state
     for i in range(len(seq)):
-        if i % 1000000 == 0:
-            print(i)
-        if i == cpg_starts[idx]:
-            state = '+'
-        if i ==  cpg_ends[idx]:
-            state = '-'
-            idx += 1
+        # if i % 1000000 == 0:
+        #     print(i)
+        if idx < cpg_df.shape[0]:
+            if i == cpg_starts[idx]:
+                state = '+'
+            if i ==  cpg_ends[idx]:
+                state = '-'
+                idx += 1
         # count transition
         state_next = d[seq[i]][state]
         transition[state_prev][state_next] += 1
@@ -75,7 +76,7 @@ def getLogTransitionProb(freq):
 
 def getLogPriorProb(prior_count):
     neg_inf = 1e-30
-    prob = prior_count / np.sum(prior_count)
+    prob = prior_count / np.sum(prior_count) + neg_inf
     return np.log(prob)
 
 
@@ -117,10 +118,25 @@ def viterbi(seq, log_trans_prob, log_prior_prob):
         path.append(prev_max_state)
         max_state = prev_max_state
     #
-    result_path = []
-    for i in range(len(seq) - 1, -1, -1):
-        result_path.append(path[i])
+    result_path = path[::-1]
     return result_path, best_score
+
+
+def path2cpg(result_path):
+    cpg_df = []
+    cpg_state = ''
+    for idx in range(len(result_path)):
+        if result_path[idx][1] == '+' and cpg_state != '+':
+            cpg_state = '+'
+            start = idx
+        if result_path[idx][1] == '-' and cpg_state != '-':
+            cpg_state = '-'
+            end = idx
+            cpg_df.append([start, end])
+    if cpg_state == '+':
+        cpg_df.append([start, len(result_path)])
+    return pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
+
 
 
 def iou(start1, end1, start2, end2):
@@ -178,10 +194,15 @@ if __name__ == '__main__':
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
 
     train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=2000010) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=2100000) 
     transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(transitionFreq)
     log_prior_prob = getLogPriorProb(priorFreq)
     pred_path, best_score = viterbi(test_seq, log_trans_prob, log_prior_prob)
+    pred_cpg = path2cpg(pred_path)
+    print("GT:")
+    print(test_cpg)
+    print("PRED:")
+    print(pred_cpg)
 
 
