@@ -2,6 +2,10 @@ import sys
 import numpy as np
 from Bio import SeqIO
 import pandas as pd
+import matplotlib.pyplot as plt
+import pylab as pl
+from matplotlib import collections as mc
+from matplotlib import colors as mcolors
 
 STATE = ['A+', 'A-', 'G+', 'G-', 'C+', 'C-', 'T+', 'T-', 'N+', 'N-'] 
 OBS = ['A', 'G', 'C', 'T', 'N']
@@ -129,7 +133,7 @@ def path2cpg(result_path):
         if result_path[idx][1] == '+' and cpg_state != '+':
             cpg_state = '+'
             start = idx
-        if result_path[idx][1] == '-' and cpg_state != '-':
+        if result_path[idx][1] == '-' and cpg_state == '+':
             cpg_state = '-'
             end = idx
             cpg_df.append([start, end])
@@ -170,11 +174,68 @@ def score(cpg_gt, cpg_pred, thresholds=[0.5]):
     return np.sum(scores) / len(thresholds)
 
 
+def visualize(gt_cpg, pred_cpg):
+    #line1 = []
+    gt_line\
+        = []
+    pred_line = []
+
+    for i in range(len(pred_cpg)):
+        s = pred_cpg.iloc[i]['chromStart']
+        e = pred_cpg.iloc[i]['chromEnd']
+        pred_line.append(s)
+        pred_line.append(e)
+
+    pred_y = [44] * len(pred_line)
+    pred_line = list(zip(pred_line, pred_y))
+    pred_line = [pred_line[x:x + 2] for x in range(0, len(pred_line), 2)]
+
+    for i in range(len(gt_cpg)):
+        s = gt_cpg.iloc[i]['chromStart']
+        e = gt_cpg.iloc[i]['chromEnd']
+        gt_line.append(s)
+        gt_line.append(e)
+        #print start, end
+
+    gt_y = [45] * len(gt_line)
+    gt_line = list(zip(gt_line, gt_y))
+    gt_line = [gt_line[x:x + 2] for x in range(0, len(gt_line), 2)]
+    # zip into tuple
+
+    # merge into two tuple list
+    #ground = [[(0, 50), (2030, 50)], [(13290, 50), (13514, 50)], [(13949, 50), (14471, 50)]]
+    #lines = [[(0, 40), (2093, 40)], [(5759, 40), (6003, 40)], [(18348, 40), (18681, 40)]]
+    # c = np.array([(1, 1, 0, 0), (0, 0, 1, 0)])
+    colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+
+
+    lc = mc.LineCollection(pred_line, colors=colors, linewidths=3, label ='Predicted CPG' )
+    gc = mc.LineCollection(gt_line, colors=colors, linewidths=3, label = 'Grounded CPG')
+
+    #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
+    fig, ax = pl.subplots()
+    ax.set_xlim(0, 95550)
+    ax.add_collection(lc)
+    ax.add_collection(gc)
+    #ax.autoscale()
+    ax.margins(0.1)
+    pl.show()
+
+
 # TO DO:
 # post processing
 # further improvement
 
-    
+def load2():
+    train = SeqIO.read('./data/gene_data/training.txt','fasta')
+    test = SeqIO.read('./data/gene_data/testing.txt','fasta')
+    train_seq = train.seq.upper()
+    test_seq = test.seq.upper()
+    columns = ['chromStart', 'chromEnd']
+    train_cpg = pd.read_csv('./data/gene_data/cpg_island_training.txt',sep=' ', names = columns)
+    test_cpg = pd.read_csv('./data/gene_data/cpg_island_testing.txt',sep=' ', names = columns)
+    return train_seq, test_seq, train_cpg, test_cpg
+
 
 
 
@@ -193,16 +254,21 @@ if __name__ == '__main__':
     cpg_df = load_cpg(cpgPath)
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
 
-    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=2000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=2100000) 
+    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=3000000) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=1100000) 
+
+    # train_seq, test_seq, train_cpg, test_cpg = load2()
+
     transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(transitionFreq)
     log_prior_prob = getLogPriorProb(priorFreq)
     pred_path, best_score = viterbi(test_seq, log_trans_prob, log_prior_prob)
     pred_cpg = path2cpg(pred_path)
-    print("GT:")
-    print(test_cpg)
-    print("PRED:")
-    print(pred_cpg)
+    # print("GT:")
+    # print(test_cpg)
+    # print("PRED:")
+    # print(pred_cpg)
+    print(score(test_cpg, pred_cpg, thresholds = [0.1]))
+    visualize(test_cpg, pred_cpg)
 
 
