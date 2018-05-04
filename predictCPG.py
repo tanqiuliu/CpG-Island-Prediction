@@ -139,7 +139,40 @@ def path2cpg(result_path):
             cpg_df.append([start, end])
     if cpg_state == '+':
         cpg_df.append([start, len(result_path)])
-    return pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
+    cpg_df = pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
+    return cpg_df
+
+
+def getCpgInfo(cpg_df, seq):
+    # extract CpG information from predicted CpG islands
+    cpg_df['length'] = np.nan
+    cpg_df['cpgNum'] = np.nan
+    cpg_df['gcNum'] = np.nan
+    cpg_df['perCpg'] = np.nan
+    cpg_df['perGc'] = np.nan
+    cpg_df['obsExp'] = np.nan
+    info = cpg_df.values
+    for idx in range(len(cpg_df)):
+        start = info[idx,0]
+        end = info[idx,1]
+        subseq = seq[int(start):int(end)]
+        length = end - start
+        cpgNum = len(subseq.split('CG')) - 1
+        gNum = np.sum(np.array(list(subseq)) == 'G')
+        cNum = np.sum(np.array(list(subseq)) == 'C')
+        obsExp = cpgNum * length / (gNum * cNum)
+        info[idx,2] = length
+        info[idx,3] = cpgNum
+        info[idx,4] = gNum + cNum
+        info[idx,5] = (2 * cpgNum / length) * 100
+        info[idx,6] = ((gNum + cNum) / length) * 100
+        info[idx,7] = obsExp
+        # cpg_df['cpgNum'][idx] = cpgNum
+        # cpg_df['gcNum'][idx] =  gNum + cNum
+        # cpg_df['perCpg'][idx] = (2 * cpgNum / length) * 100
+        # cpg_df['perGc'][idx] = ((gNum + cNum) / length) * 100
+        # cpg_df['obsExp'][idx] = obsExp
+    return pd.DataFrame(info, columns=cpg_df.columns)
 
 
 
@@ -248,6 +281,7 @@ if __name__ == '__main__':
         seqPath = 'data/chr1.fa'
         cpgPath = 'data/hg38-cpgIslandExt.txt'
     
+    print("loading dataset...")
     chr = SeqIO.read(seqPath,'fasta')
     chr_id = chr.id
     chr_seq = chr.seq.upper()
@@ -259,16 +293,17 @@ if __name__ == '__main__':
 
     # train_seq, test_seq, train_cpg, test_cpg = load2()
 
+    print("Getting Transition Matrix and Prior...")
     transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(transitionFreq)
     log_prior_prob = getLogPriorProb(priorFreq)
+    print("Running Viterbi to predict hidden states...")
     pred_path, best_score = viterbi(test_seq, log_trans_prob, log_prior_prob)
     pred_cpg = path2cpg(pred_path)
-    # print("GT:")
-    # print(test_cpg)
-    # print("PRED:")
-    # print(pred_cpg)
-    print(score(test_cpg, pred_cpg, thresholds = [0.1]))
+    pred_cpg = getCpgInfo(pred_cpg, test_seq)
+    print("Predicted CpG Island Info:")
+    print(pred_cpg)
+    print("Detection Score: %s" %score(test_cpg, pred_cpg, thresholds = [0.1]))
     visualize(test_cpg, pred_cpg)
 
 
