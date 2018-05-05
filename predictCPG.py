@@ -330,7 +330,6 @@ if __name__ == '__main__':
 
     print("Visualization: ")
     perCpg_list, perGc_list = seqwiseGcPer(test_seq, 200)
-    print(len(perGc_list))
     win_size = 200
     visualize(test_cpg, pred_cpg, perGc_list, win_size)
 
