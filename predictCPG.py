@@ -230,10 +230,8 @@ def seqwiseGcPer(seq, win_size = 200):
     return perCpg_list, perGc_list
 
 
-def visualize(gt_cpg, pred_cpg):
-    #line1 = []
-    gt_line\
-        = []
+def visualize(gt_cpg, pred_cpg, perGc_list, win_size):    #line1 = []
+    gt_line= []
     pred_line = []
 
     for i in range(len(pred_cpg)):
@@ -242,7 +240,7 @@ def visualize(gt_cpg, pred_cpg):
         pred_line.append(s)
         pred_line.append(e)
 
-    pred_y = [44] * len(pred_line)
+    pred_y = [1] * len(pred_line)
     pred_line = list(zip(pred_line, pred_y))
     pred_line = [pred_line[x:x + 2] for x in range(0, len(pred_line), 2)]
 
@@ -253,7 +251,7 @@ def visualize(gt_cpg, pred_cpg):
         gt_line.append(e)
         #print start, end
 
-    gt_y = [45] * len(gt_line)
+    gt_y = [0] * len(gt_line)
     gt_line = list(zip(gt_line, gt_y))
     gt_line = [gt_line[x:x + 2] for x in range(0, len(gt_line), 2)]
     # zip into tuple
@@ -261,20 +259,32 @@ def visualize(gt_cpg, pred_cpg):
     # merge into two tuple list
     #ground = [[(0, 50), (2030, 50)], [(13290, 50), (13514, 50)], [(13949, 50), (14471, 50)]]
     #lines = [[(0, 40), (2093, 40)], [(5759, 40), (6003, 40)], [(18348, 40), (18681, 40)]]
-    # c = np.array([(1, 1, 0, 0), (0, 0, 1, 0)])
-    colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    #c = np.array([(1, 1, 0, 0)])
+    #r = np.array([(0, 0, 1, 0)])
+    #
+    x = np.linspace(0, win_size*len(perGc_list), len(perGc_list))
+    perGc_list = list(zip(x, perGc_list/100))
+    perGc_list = [perGc_list[x:x + 2] for x in range(0, len(perGc_list), 1)]
 
+    # colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    gc = mc.LineCollection(gt_line,  colors = 'c', linewidths=3, label = 'Grounded CPG Islands')
+    lc = mc.LineCollection(pred_line,  colors= 'm', linewidths=3, label ='Predicted CPG Islands' )
+    gcp =  mc.LineCollection(perGc_list,  colors= 'k', linewidths=1, label ='CG Percent in Sequence' )
 
-    lc = mc.LineCollection(pred_line, colors=colors, linewidths=3, label ='Predicted CPG' )
-    gc = mc.LineCollection(gt_line, colors=colors, linewidths=3, label = 'Grounded CPG')
 
     #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
-    fig, ax = pl.subplots()
-    ax.set_xlim(0, 95550)
-    ax.add_collection(lc)
-    ax.add_collection(gc)
-    #ax.autoscale()
-    ax.margins(0.1)
+    fig, ax1 = pl.subplots()
+    ax1.set_xlim(0, 1000000)
+    #ax.set_ylim(-0.5, 1.8)
+    ax1.add_collection(lc)
+    ax1.add_collection(gc)
+    ax1.add_collection(gcp)
+    ax1.legend(frameon=False, loc='upper center', shadow = 'True', title="Predicted results v.s Grounded Truth")
+    ax1.autoscale()
+    #ax.xlabel('Sequence Index')
+
+    # a.sci(gcp)  # This allows interactive changing of the colormap.
+    #ax.margins(0.1)
     pl.show()
 
 
@@ -324,6 +334,8 @@ if __name__ == '__main__':
     print(pred_cpg)
     print("Detection Score: %s" %score(test_cpg, pred_cpg, thresholds = [0.5]))
 
-    # visualize(test_cpg, pred_cpg) 
+    # perCpg_list, perGc_list = seqwiseGcPer(test_seq, 200)
+    # visualize(test_cpg, pred_cpg, perGc_list, 200)
+
 
 
