@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pylab as pl
 from matplotlib import collections as mc
-from matplotlib import colors as mcolors
+from matplotlib.colors import ListedColormap
 
 STATE = ['A+', 'A-', 'G+', 'G-', 'C+', 'C-', 'T+', 'T-', 'N+', 'N-']
 OBS = ['A', 'G', 'C', 'T', 'N']
@@ -142,7 +142,7 @@ def viterbi(seq, log_trans_prob, log_prior_prob):
         max_state = prev_max_state
     #
     result_path = path[::-1]
-    print prob_mem, prev_state_mem
+    #print prob_mem, prev_state_mem
     return result_path, best_score
 
 
@@ -226,7 +226,7 @@ def getCpgInfo(cpg_df, seq):
         # cpg_df['obsExp'][idx] = obsExp
     return pd.DataFrame(info, columns=cpg_df.columns)
 
-def visual(gt_cpg, pred_cpg, perGc_list):    #line1 = []
+def visualize(gt_cpg, pred_cpg, perGc_list, win_size):    #line1 = []
     gt_line= []
     pred_line = []
 
@@ -252,13 +252,7 @@ def visual(gt_cpg, pred_cpg, perGc_list):    #line1 = []
     gt_line = [gt_line[x:x + 2] for x in range(0, len(gt_line), 2)]
     # zip into tuple
 
-    # merge into two tuple list
-    #ground = [[(0, 50), (2030, 50)], [(13290, 50), (13514, 50)], [(13949, 50), (14471, 50)]]
-    #lines = [[(0, 40), (2093, 40)], [(5759, 40), (6003, 40)], [(18348, 40), (18681, 40)]]
-    #c = np.array([(1, 1, 0, 0)])
-    #r = np.array([(0, 0, 1, 0)])
-    #
-    x = np.linspace(0, 1000000, len(perGc_list))
+    x = np.linspace(0, win_size*len(perGc_list), len(perGc_list))
     perGc_list = list(zip(x, perGc_list/100))
     perGc_list = [perGc_list[x:x + 2] for x in range(0, len(perGc_list), 1)]
 
@@ -266,21 +260,28 @@ def visual(gt_cpg, pred_cpg, perGc_list):    #line1 = []
     gc = mc.LineCollection(gt_line,  colors = 'c', linewidths=3, label = 'Grounded CPG Islands')
     lc = mc.LineCollection(pred_line,  colors= 'm', linewidths=3, label ='Predicted CPG Islands' )
     gcp =  mc.LineCollection(perGc_list,  colors= 'k', linewidths=1, label ='CG Percent in Sequence' )
-
+    cMap = ListedColormap(['white', 'green', 'blue', 'red'])
 
     #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
-    fig, ax1 = pl.subplots()
-    ax1.set_xlim(0, 1000000)
-    #ax.set_ylim(-0.5, 1.8)
-    ax1.add_collection(lc)
-    ax1.add_collection(gc)
-    ax1.add_collection(gcp)
-    ax1.legend(frameon=False, loc='upper center', shadow = 'True', title="Predicted results v.s Grounded Truth")
-    ax1.autoscale()
-    #ax.xlabel('Sequence Index')
+    fig, ax1 = pl.subplots(2, sharex=True)
+    ax1[1].set_xlim(0, 100000)
+    ax1[1].set_yticklabels(list(["0", "0.2", "0.4", "0.6", "0.8","1.0"]), minor=False)
+    ax1[1].set_ylim(-0.5, 2.5)
+    ax1[1].add_collection(lc)
+    ax1[1].add_collection(gc)
+    ax1[0].add_collection(gcp)
+#    ax1[0].set_ylabels("Cg Percent", minor=False)
+    ax1[1].set_ylim(-0.5, 2.5)
 
-    # a.sci(gcp)  # This allows interactive changing of the colormap.
-    #ax.margins(0.1)
+    ax1[1].legend(frameon=False, loc='upper left', shadow = 'True', title="Predicted results v.s Grounded Truth")
+    #ax1.autoscale()
+    ax1[0].set_title('CG Percent in Squence')
+    #ax.xlabel('Sequence Index')
+#    heatmap = ax1[0].pcolor(perGc_list, cmap=cMap)
+   # cbar = plt.colorbar(heatmap)
+  #  cbar.ax.set_yticklabels(['0', '0.25', '0.5', '> 0.75'])
+   # cbar.set_label('Percentage of CG', rotation=270)
+
     pl.show()
 
 
@@ -297,7 +298,7 @@ def seqwiseGcPer(seq, win_size = 200):
     return perCpg_list, perGc_list, len(seq)
 
 def visual_info(perGc_list):    #line1 = []
-    x = np.linspace(0, 1000000, len(perGc_list))
+    x = np.linspace(0, 100000, len(perGc_list))
     # percent_line = []
     # population = np.array([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
     plt.plot(x, perGc_list, linestyle='-')
@@ -371,6 +372,7 @@ if __name__ == '__main__':
     print score(test_cpg, pred_cpg)
     perCpg_list, perGc_list,num = seqwiseGcPer(test_seq)
     print len(perGc_list)
+    win_size = 200
 
-    print visual(test_cpg, pred_cpg, perGc_list[500*16/100:17*500/100])
+    print visualize(test_cpg, pred_cpg, perGc_list, win_size)
     print visual_info(perGc_list)
