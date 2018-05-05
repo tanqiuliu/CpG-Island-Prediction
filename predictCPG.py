@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pylab as pl
 from matplotlib import collections as mc
-from matplotlib import colors as mcolors
+from matplotlib.colors import ListedColormap
 
 STATE = ['A+', 'A-', 'G+', 'G-', 'C+', 'C-', 'T+', 'T-', 'N+', 'N-'] 
 OBS = ['A', 'G', 'C', 'T', 'N']
@@ -233,59 +233,53 @@ def seqwiseGcPer(seq, win_size = 200):
 def visualize(gt_cpg, pred_cpg, perGc_list, win_size):    #line1 = []
     gt_line= []
     pred_line = []
-
     for i in range(len(pred_cpg)):
         s = pred_cpg.iloc[i]['chromStart']
         e = pred_cpg.iloc[i]['chromEnd']
         pred_line.append(s)
         pred_line.append(e)
-
     pred_y = [1] * len(pred_line)
     pred_line = list(zip(pred_line, pred_y))
     pred_line = [pred_line[x:x + 2] for x in range(0, len(pred_line), 2)]
-
     for i in range(len(gt_cpg)):
         s = gt_cpg.iloc[i]['chromStart']
         e = gt_cpg.iloc[i]['chromEnd']
         gt_line.append(s)
         gt_line.append(e)
         #print start, end
-
     gt_y = [0] * len(gt_line)
     gt_line = list(zip(gt_line, gt_y))
     gt_line = [gt_line[x:x + 2] for x in range(0, len(gt_line), 2)]
     # zip into tuple
-
-    # merge into two tuple list
-    #ground = [[(0, 50), (2030, 50)], [(13290, 50), (13514, 50)], [(13949, 50), (14471, 50)]]
-    #lines = [[(0, 40), (2093, 40)], [(5759, 40), (6003, 40)], [(18348, 40), (18681, 40)]]
-    #c = np.array([(1, 1, 0, 0)])
-    #r = np.array([(0, 0, 1, 0)])
-    #
     x = np.linspace(0, win_size*len(perGc_list), len(perGc_list))
     perGc_list = list(zip(x, perGc_list/100))
     perGc_list = [perGc_list[x:x + 2] for x in range(0, len(perGc_list), 1)]
-
     # colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
     gc = mc.LineCollection(gt_line,  colors = 'c', linewidths=3, label = 'Grounded CPG Islands')
     lc = mc.LineCollection(pred_line,  colors= 'm', linewidths=3, label ='Predicted CPG Islands' )
     gcp =  mc.LineCollection(perGc_list,  colors= 'k', linewidths=1, label ='CG Percent in Sequence' )
-
-
+    cMap = ListedColormap(['white', 'green', 'blue', 'red'])
     #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
-    fig, ax1 = pl.subplots()
-    ax1.set_xlim(0, 1000000)
-    #ax.set_ylim(-0.5, 1.8)
-    ax1.add_collection(lc)
-    ax1.add_collection(gc)
-    ax1.add_collection(gcp)
-    ax1.legend(frameon=False, loc='upper center', shadow = 'True', title="Predicted results v.s Grounded Truth")
-    ax1.autoscale()
+    fig, ax1 = pl.subplots(2, sharex=True)
+    ax1[1].set_xlim(0, 100000)
+    ax1[1].set_yticklabels(list(["0", "0.2", "0.4", "0.6", "0.8","1.0"]), minor=False)
+    ax1[1].set_ylim(-0.5, 2.5)
+    ax1[1].add_collection(lc)
+    ax1[1].add_collection(gc)
+    ax1[0].add_collection(gcp)
+    # ax1[0].set_ylabels("Cg Percent", minor=False)
+    ax1[1].set_ylim(-0.5, 2.5)
+    ax1[1].legend(frameon=False, loc='upper left', shadow = 'True', title="Predicted results v.s Grounded Truth")
+    #ax1.autoscale()
+    ax1[0].set_title('CG Percent in Squence')
     #ax.xlabel('Sequence Index')
-
-    # a.sci(gcp)  # This allows interactive changing of the colormap.
-    #ax.margins(0.1)
+    # heatmap = ax1[0].pcolor(perGc_list, cmap=cMap)
+    # cbar = plt.colorbar(heatmap)
+    # cbar.ax.set_yticklabels(['0', '0.25', '0.5', '> 0.75'])
+    # cbar.set_label('Percentage of CG', rotation=270)
     pl.show()
+
+
 
 
 if __name__ == '__main__':
@@ -334,8 +328,10 @@ if __name__ == '__main__':
     print(pred_cpg)
     print("Detection Score: %s" %score(test_cpg, pred_cpg, thresholds = [0.5]))
 
-    # perCpg_list, perGc_list = seqwiseGcPer(test_seq, 200)
-    # visualize(test_cpg, pred_cpg, perGc_list, 200)
-
+    print("Visualization: ")
+    perCpg_list, perGc_list = seqwiseGcPer(test_seq, 200)
+    print(len(perGc_list))
+    win_size = 200
+    visualize(test_cpg, pred_cpg, perGc_list, win_size)
 
 
