@@ -13,7 +13,7 @@ OBS = ['A', 'G', 'C', 'T', 'N']
 
 def load_cpg(fpath):
     """
-    trn type: pandas DataFrame
+    rtn type: pandas DataFrame
     """
     columns = ['bin','chrom','chromStart','chromEnd','name','length','cpgNum','gcNum','perCpg','perGc','obsExp']
     cpg = pd.read_csv(fpath,sep='\t', names = columns)
@@ -38,6 +38,9 @@ def sample_seq(chr_seq, cpg_df, start, end):
 
 
 def getFreq(seq, cpg_df):
+    """
+    count the transitions frequencies and nucleotide frequencies
+    """
     cpg_df = cpg_df.sort_values(by=['chromStart'])
     cpg_starts = cpg_df['chromStart']
     cpg_ends = cpg_df['chromEnd']
@@ -70,7 +73,7 @@ def getFreq(seq, cpg_df):
 
 def getLogTransitionProb(freq):
     """
-    freq: pandas DataFrame, transition frequency from count
+    freq: pandas DataFrame, transition frequencies
     """
     neg_inf = 1e-30
     #freq = freq.drop(columns=['N+','N-'],index=['N+','N-'])
@@ -79,6 +82,9 @@ def getLogTransitionProb(freq):
 
 
 def getLogPriorProb(prior_count):
+    """
+    prior_count: pandas Series, nucleotide frequencies
+    """
     neg_inf = 1e-30
     prob = prior_count / np.sum(prior_count) + neg_inf
     return np.log(prob)
@@ -127,6 +133,9 @@ def viterbi(seq, log_trans_prob, log_prior_prob):
 
 
 def path2cpg(result_path):
+    """
+    build cpg dataframe from resulting hidden state sequence
+    """
     cpg_df = []
     cpg_state = ''
     for idx in range(len(result_path)):
@@ -139,12 +148,17 @@ def path2cpg(result_path):
             cpg_df.append([start, end])
     if cpg_state == '+':
         cpg_df.append([start, len(result_path)])
-    cpg_df = pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
-    return cpg_df
+    if len(cpg_df) > 0:
+        return pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
+    else:
+        return pd.DataFrame(columns=['chromStart', 'chromEnd'])
+
 
 
 def getCpgInfo(cpg_df, seq):
-    # extract CpG information from predicted CpG islands
+    """
+    extract CpG information from predicted CpG islands
+    """
     cpg_df['length'] = np.nan
     cpg_df['cpgNum'] = np.nan
     cpg_df['gcNum'] = np.nan
@@ -167,11 +181,6 @@ def getCpgInfo(cpg_df, seq):
         info[idx,5] = (2 * cpgNum / length) * 100
         info[idx,6] = ((gNum + cNum) / length) * 100
         info[idx,7] = obsExp
-        # cpg_df['cpgNum'][idx] = cpgNum
-        # cpg_df['gcNum'][idx] =  gNum + cNum
-        # cpg_df['perCpg'][idx] = (2 * cpgNum / length) * 100
-        # cpg_df['perGc'][idx] = ((gNum + cNum) / length) * 100
-        # cpg_df['obsExp'][idx] = obsExp
     return pd.DataFrame(info, columns=cpg_df.columns)
 
 
@@ -189,10 +198,11 @@ def iou(start1, end1, start2, end2):
 
 def score(cpg_gt, cpg_pred, thresholds=[0.5]):
     """
-    cpg_gt = train_cpg.iloc[0:5]
-    aa = np.array([[29000,29500],[134800,135300],[200000,200400],[350000,360000],[380000,383000]])
-    cpg_pred = pd.DataFrame(aa,columns=['chromStart','chromEnd'])
+    scoring function
     """
+    if len(cpg_gt) == 0:
+        print("Aborted: ground truth does not contain any CpG islands.")
+        return np.nan
     iou_matrix = np.zeros((len(cpg_gt), len(cpg_pred)))
     for i in range(len(cpg_gt)):
         for j in range(len(cpg_pred)):
@@ -205,6 +215,19 @@ def score(cpg_gt, cpg_pred, thresholds=[0.5]):
         FN = len(cpg_gt) - TP
         scores.append(TP / (TP + FP + FN))
     return np.sum(scores) / len(thresholds)
+
+
+def seqwiseGcPer(seq, win_size = 200):
+    num_win = int(np.ceil(len(seq) / win_size))
+    perGc_list = np.zeros(num_win)
+    perCpg_list = np.zeros(num_win)
+    for idx in range(num_win):
+        subseq = seq[idx * win_size:(idx + 1) * win_size]
+        perGc = (np.sum(np.array(list(subseq)) == 'G') + np.sum(np.array(list(subseq)) == 'C')) / win_size * 100
+        perCpg = (len(subseq.split('CG')) - 1) * 2 / win_size * 100
+        perGc_list[idx] = perGc
+        perCpg_list[idx] = perCpg
+    return perCpg_list, perGc_list
 
 
 def visualize(gt_cpg, pred_cpg):
@@ -255,55 +278,52 @@ def visualize(gt_cpg, pred_cpg):
     pl.show()
 
 
-# TO DO:
-# post processing
-# further improvement
-
-def load2():
-    train = SeqIO.read('./data/gene_data/training.txt','fasta')
-    test = SeqIO.read('./data/gene_data/testing.txt','fasta')
-    train_seq = train.seq.upper()
-    test_seq = test.seq.upper()
-    columns = ['chromStart', 'chromEnd']
-    train_cpg = pd.read_csv('./data/gene_data/cpg_island_training.txt',sep=' ', names = columns)
-    test_cpg = pd.read_csv('./data/gene_data/cpg_island_testing.txt',sep=' ', names = columns)
-    return train_seq, test_seq, train_cpg, test_cpg
-
-
-
-
-
 if __name__ == '__main__':
-    if len(sys.argv) == 3:
-        seqPath = sys.argv[1]
-        cpgPath = sys.argv[2]
+    if len(sys.argv) == 5:
+        train_start = int(sys.argv[1])
+        train_end = int(sys.argv[2])
+        test_start = int(sys.argv[3])
+        test_end = int(sys.argv[4])
+    elif len(sys.argv) == 1:
+        train_start = 2500000
+        train_end = 3500000
+        test_start = 1600000
+        test_end = 1700000
     else:
-        seqPath = 'data/chr1.fa'
-        cpgPath = 'data/hg38-cpgIslandExt.txt'
+        print("Argument Error: predictCPG.py accpets 0 or 4 parameters.")
+
+    seqPath = 'data/chr1.fa'
+    cpgPath = 'data/hg38-cpgIslandExt.txt'
+    outputPath = './output/predicted_CpG.csv'
     
-    print("loading dataset...")
+    print("Loading dataset...")
     chr = SeqIO.read(seqPath,'fasta')
     chr_id = chr.id
     chr_seq = chr.seq.upper()
     cpg_df = load_cpg(cpgPath)
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
+    print("Loading complete.")
 
-    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=3000000) 
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=1100000) 
+    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=train_start, end=train_end) 
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=test_start, end=test_end)
 
-    # train_seq, test_seq, train_cpg, test_cpg = load2()
-
-    print("Getting Transition Matrix and Prior...")
+    print("Getting transition matrix and prior...")
     transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(transitionFreq)
     log_prior_prob = getLogPriorProb(priorFreq)
-    print("Running Viterbi to predict hidden states...")
+    print("Transition matrix and prior built.")
+
+    print("Running viterbi to predict hidden states...")
     pred_path, best_score = viterbi(test_seq, log_trans_prob, log_prior_prob)
     pred_cpg = path2cpg(pred_path)
     pred_cpg = getCpgInfo(pred_cpg, test_seq)
+    pred_cpg.to_csv(outputPath)
+    print("Prediction complete.")
+
     print("Predicted CpG Island Info:")
     print(pred_cpg)
-    print("Detection Score: %s" %score(test_cpg, pred_cpg, thresholds = [0.1]))
-    visualize(test_cpg, pred_cpg)
+    print("Detection Score: %s" %score(test_cpg, pred_cpg, thresholds = [0.5]))
+
+    # visualize(test_cpg, pred_cpg) 
 
 
