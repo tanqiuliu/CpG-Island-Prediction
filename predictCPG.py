@@ -142,24 +142,8 @@ def viterbi(seq, log_trans_prob, log_prior_prob):
         max_state = prev_max_state
     #
     result_path = path[::-1]
+    print prob_mem, prev_state_mem
     return result_path, best_score
-
-
-def path2cpg(result_path):
-    cpg_df = []
-    cpg_state = ''
-    start = 0
-    for idx in range(len(result_path)):
-        if result_path[idx][1] == '+' and cpg_state != '+':
-            cpg_state = '+'
-            start = idx
-        if result_path[idx][1] == '-' and cpg_state != '-':
-            cpg_state = '-'
-            end = idx
-            cpg_df.append([start, end])
-    if cpg_state == '+':
-        cpg_df.append([start, len(result_path)])
-    return pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
 
 
 def iou(start1, end1, start2, end2):
@@ -173,7 +157,7 @@ def iou(start1, end1, start2, end2):
         return intersect / union
 
 
-def score(cpg_gt, cpg_pred, thresholds=[0.01]):
+def score(cpg_gt, cpg_pred, thresholds=[0.5]):
     """
     cpg_gt = train_cpg.iloc[0:5]
     aa = np.array([[29000,29500],[134800,135300],[200000,200400],[350000,360000],[380000,383000]])
@@ -182,23 +166,68 @@ def score(cpg_gt, cpg_pred, thresholds=[0.01]):
     iou_matrix = np.zeros((len(cpg_gt), len(cpg_pred)))
     for i in range(len(cpg_gt)):
         for j in range(len(cpg_pred)):
-            iou_matrix[i, j] = iou(cpg_gt.iloc[i]['chromStart'], cpg_gt.iloc[i]['chromEnd'],
-                                   cpg_pred.iloc[j]['chromStart'], cpg_pred.iloc[j]['chromEnd'])
-            print iou_matrix
+            iou_matrix[i,j] = iou(cpg_gt.iloc[i]['chromStart'], cpg_gt.iloc[i]['chromEnd'], cpg_pred.iloc[j]['chromStart'], cpg_pred.iloc[j]['chromEnd'])
     scores = []
     for threshold in thresholds:
         match = (iou_matrix > threshold) * 1
         TP = np.sum(np.sum(match))
+        TP = float(TP)
         FP = len(cpg_pred) - TP
+        FP = float(FP)
         FN = len(cpg_gt) - TP
+        FN = float(FN)
         scores.append(TP / (TP + FP + FN))
-    print scores
     return np.sum(scores) / len(thresholds)
 
-def visual(gt_cpg, pred_cpg):
-    #line1 = []
-    gt_line\
-        = []
+def path2cpg(result_path):
+    cpg_df = []
+    cpg_state = ''
+    for idx in range(len(result_path)):
+        if result_path[idx][1] == '+' and cpg_state != '+':
+            cpg_state = '+'
+            start = idx
+        if result_path[idx][1] == '-' and cpg_state == '+':
+            cpg_state = '-'
+            end = idx
+            cpg_df.append([start, end])
+    if cpg_state == '+':
+        cpg_df.append([start, len(result_path)])
+    cpg_df = pd.DataFrame(np.array(cpg_df), columns=['chromStart', 'chromEnd'])
+    return cpg_df
+
+def getCpgInfo(cpg_df, seq):
+    # extract CpG information from predicted CpG islands
+    cpg_df['length'] = np.nan
+    cpg_df['cpgNum'] = np.nan
+    cpg_df['gcNum'] = np.nan
+    cpg_df['perCpg'] = np.nan
+    cpg_df['perGc'] = np.nan
+    cpg_df['obsExp'] = np.nan
+    info = cpg_df.values
+    for idx in range(len(cpg_df)):
+        start = info[idx,0]
+        end = info[idx,1]
+        subseq = seq[int(start):int(end)]
+        length = end - start
+        cpgNum = len(subseq.split('CG')) - 1
+        gNum = np.sum(np.array(list(subseq)) == 'G')
+        cNum = np.sum(np.array(list(subseq)) == 'C')
+        obsExp = cpgNum * length / (gNum * cNum)
+        info[idx,2] = length
+        info[idx,3] = cpgNum
+        info[idx,4] = gNum + cNum
+        info[idx,5] = (2 * cpgNum / length) * 100
+        info[idx,6] = ((gNum + cNum) / length) * 100
+        info[idx,7] = obsExp
+        # cpg_df['cpgNum'][idx] = cpgNum
+        # cpg_df['gcNum'][idx] =  gNum + cNum
+        # cpg_df['perCpg'][idx] = (2 * cpgNum / length) * 100
+        # cpg_df['perGc'][idx] = ((gNum + cNum) / length) * 100
+        # cpg_df['obsExp'][idx] = obsExp
+    return pd.DataFrame(info, columns=cpg_df.columns)
+
+def visual(gt_cpg, pred_cpg, perGc_list):    #line1 = []
+    gt_line= []
     pred_line = []
 
     for i in range(len(pred_cpg)):
@@ -207,9 +236,9 @@ def visual(gt_cpg, pred_cpg):
         pred_line.append(s)
         pred_line.append(e)
 
-    pred_y = [44] * len(pred_line)
-    pred_line = zip(pred_line, pred_y)
-    pred_line = [pred_line[x:x + 2] for x in xrange(0, len(pred_line), 2)]
+    pred_y = [1] * len(pred_line)
+    pred_line = list(zip(pred_line, pred_y))
+    pred_line = [pred_line[x:x + 2] for x in range(0, len(pred_line), 2)]
 
     for i in range(len(gt_cpg)):
         s = gt_cpg.iloc[i]['chromStart']
@@ -218,9 +247,9 @@ def visual(gt_cpg, pred_cpg):
         gt_line.append(e)
         #print start, end
 
-    gt_y = [45] * len(gt_line)
-    gt_line = zip(gt_line, gt_y)
-    gt_line = [gt_line[x:x + 2] for x in xrange(0, len(gt_line), 2)]
+    gt_y = [0] * len(gt_line)
+    gt_line = list(zip(gt_line, gt_y))
+    gt_line = [gt_line[x:x + 2] for x in range(0, len(gt_line), 2)]
     # zip into tuple
 
     # merge into two tuple list
@@ -228,26 +257,84 @@ def visual(gt_cpg, pred_cpg):
     #lines = [[(0, 40), (2093, 40)], [(5759, 40), (6003, 40)], [(18348, 40), (18681, 40)]]
     #c = np.array([(1, 1, 0, 0)])
     #r = np.array([(0, 0, 1, 0)])
-    colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    #
+    x = np.linspace(0, 1000000, len(perGc_list))
+    perGc_list = list(zip(x, perGc_list/100))
+    perGc_list = [perGc_list[x:x + 2] for x in range(0, len(perGc_list), 1)]
 
+    # colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    gc = mc.LineCollection(gt_line,  colors = 'c', linewidths=3, label = 'Grounded CPG Islands')
+    lc = mc.LineCollection(pred_line,  colors= 'm', linewidths=3, label ='Predicted CPG Islands' )
+    gcp =  mc.LineCollection(perGc_list,  colors= 'k', linewidths=1, label ='CG Percent in Sequence' )
 
-    lc = mc.LineCollection(pred_line,  linewidths=3, label ='Predicted CPG' )
-    gc = mc.LineCollection(gt_line,  linewidths=3, label = 'Grounded CPG')
 
     #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
-    fig, ax = pl.subplots()
-    ax.set_xlim(0, 95550)
-    ax.add_collection(lc)
-    ax.add_collection(gc)
-    ax.legend()
-    #ax.autoscale()
-    ax.margins(0.1)
+    fig, ax1 = pl.subplots()
+    ax1.set_xlim(0, 1000000)
+    #ax.set_ylim(-0.5, 1.8)
+    ax1.add_collection(lc)
+    ax1.add_collection(gc)
+    ax1.add_collection(gcp)
+    ax1.legend(frameon=False, loc='upper center', shadow = 'True', title="Predicted results v.s Grounded Truth")
+    ax1.autoscale()
+    #ax.xlabel('Sequence Index')
+
+    # a.sci(gcp)  # This allows interactive changing of the colormap.
+    #ax.margins(0.1)
     pl.show()
 
 
-# TO DO:
-# post processing
-# further improvement
+def seqwiseGcPer(seq, win_size = 200):
+    num_win = int(np.ceil(len(seq) / win_size))
+    perGc_list = np.zeros(num_win)
+    perCpg_list = np.zeros(num_win)
+    for idx in range(num_win):
+        subseq = seq[idx * win_size:(idx + 1) * win_size]
+        perGc = float((np.sum(np.array(list(subseq) ) == 'G') + float(np.sum(np.array(list(subseq)) == 'C')) / win_size * 100))
+        perCpg = float((len(subseq.split('CG')) - 1) * 2 / win_size * 100)
+        perGc_list[idx] = perGc
+        perCpg_list[idx] = perCpg
+    return perCpg_list, perGc_list, len(seq)
+
+def visual_info(perGc_list):    #line1 = []
+    x = np.linspace(0, 1000000, len(perGc_list))
+    # percent_line = []
+    # population = np.array([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
+    plt.plot(x, perGc_list, linestyle='-')
+    # cbaxes = plt.axes([10, 20, 30, 40, 50, 60, 70, 80, 90,100, 110, 120])  # This is the position for the colorbar
+    #    plt.colorbar()
+    plt.legend(loc='upper center', shadow='True', title="GC Percentage%")
+    plt.show()
+
+   ##| x = np.linspace(0, 1000000, len(perGc_list))
+    #pt = list(zip(x, list(perGc_list)))
+    #gcp = mc.LineCollection(pt, linestyles='solid')
+    #fig, ax = pl.subplots()
+    #ax.add_collection(gcp)
+    #fig = plt.gcf()
+    #axcb = fig.colorbar(gcp)
+    #axcb.set_label('CG percent')
+    #a.sci(gcp)  # This allows interactive changing of the colormap.
+    #ax.margins(0.1)
+   #
+
+
+    # colors = [mcolors.to_rgba(c) for c in plt.rcParams['axes.prop_cycle'].by_key()['color']]
+    #gc = mc.LineCollection(gt_line,  colors = 'c', linewidths=3, label = 'Grounded CPG Islands')
+    #lc = mc.LineCollection(pred_line,  colors= 'm', linewidths=3, label ='Predicted CPG Islands' )
+
+    #ax.legend((pred_line, gt_line), ('Predicted CPG', 'Grouded CPG'))
+    fig, ax = pl.subplots()
+    #ax.set_xlim(0, 80000)
+    #ax.set_ylim(-0.5, 1.8)
+    #ax.add_collection(lc)
+    #ax.add_collection(gc)
+    #ax.legend(loc='upper center', shadow = 'True', title="Predicted results v.s Grounded Truth")
+    #ax.autoscale()
+    #ax.xlabel('Sequence Index')
+    #ax.margins(0.1)
+
+
 
 
 if __name__ == '__main__':
@@ -266,8 +353,8 @@ if __name__ == '__main__':
     cpg_df = load_cpg(cpgPath)
     cpg_df_chr1 = cpg_df[cpg_df['chrom'] == chr_id]
 
-    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2000000, end=3000000)
-    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1000000, end=1100000)
+    train_seq, train_cpg = sample_seq(chr_seq, cpg_df_chr1, start=2500000, end=3500000)
+    test_seq, test_cpg = sample_seq(chr_seq, cpg_df_chr1, start=1600000, end=1700000)
     transitionFreq, priorFreq = getFreq(train_seq, train_cpg)
     log_trans_prob = getLogTransitionProb(transitionFreq)
     log_prior_prob = getLogPriorProb(priorFreq)
@@ -282,4 +369,8 @@ if __name__ == '__main__':
     print(pred_cpg)
     print ("Score: ")
     print score(test_cpg, pred_cpg)
-    print visual(test_cpg, pred_cpg)
+    perCpg_list, perGc_list,num = seqwiseGcPer(test_seq)
+    print len(perGc_list)
+
+    print visual(test_cpg, pred_cpg, perGc_list[500*16/100:17*500/100])
+    print visual_info(perGc_list)
